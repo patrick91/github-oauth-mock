@@ -119,6 +119,9 @@ async def authorize_form(
     <head>
         <title>GitHub OAuth Mock - Sign In</title>
         <style>
+            * {{
+                box-sizing: border-box;
+            }}
             body {{
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
                 display: flex;
@@ -126,83 +129,130 @@ async def authorize_form(
                 align-items: center;
                 min-height: 100vh;
                 margin: 0;
-                background: #0d1117;
-                color: #c9d1d9;
+                background: #ffffff;
+                color: #1a1a1a;
             }}
             .container {{
-                background: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 6px;
-                padding: 32px;
-                width: 340px;
+                background: #ffffff;
+                border: 1px solid #e5e5e5;
+                border-radius: 8px;
+                padding: 48px;
+                width: 420px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            }}
+            .badge {{
+                display: inline-block;
+                font-size: 11px;
+                font-weight: 500;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                color: #666666;
+                margin-bottom: 12px;
             }}
             h1 {{
-                color: #58a6ff;
-                font-size: 24px;
-                margin: 0 0 8px 0;
-                text-align: center;
+                color: #1a1a1a;
+                font-size: 42px;
+                font-weight: 700;
+                margin: 0 0 12px 0;
+                letter-spacing: -1px;
+                line-height: 1.1;
             }}
             .subtitle {{
-                color: #8b949e;
-                font-size: 14px;
-                text-align: center;
-                margin-bottom: 24px;
+                color: #666666;
+                font-size: 15px;
+                line-height: 1.5;
+                margin-bottom: 32px;
             }}
             label {{
                 display: block;
                 margin-bottom: 8px;
                 font-size: 14px;
+                font-weight: 500;
+                color: #1a1a1a;
             }}
             input[type="email"] {{
                 width: 100%;
-                padding: 10px 12px;
-                border: 1px solid #30363d;
+                padding: 12px 14px;
+                border: 1px solid #e5e5e5;
                 border-radius: 6px;
-                background: #0d1117;
-                color: #c9d1d9;
-                font-size: 14px;
-                box-sizing: border-box;
-                margin-bottom: 16px;
+                background: #ffffff;
+                color: #1a1a1a;
+                font-size: 15px;
+                margin-bottom: 20px;
+                transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            }}
+            input[type="email"]::placeholder {{
+                color: #999999;
             }}
             input[type="email"]:focus {{
                 outline: none;
-                border-color: #58a6ff;
-                box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.3);
+                border-color: #1a1a1a;
+                box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.08);
             }}
             button {{
                 width: 100%;
-                padding: 10px 16px;
-                background: #238636;
-                color: white;
+                padding: 12px 20px;
+                background: #1a1a1a;
+                color: #ffffff;
                 border: none;
                 border-radius: 6px;
                 font-size: 14px;
                 font-weight: 600;
                 cursor: pointer;
+                transition: background 0.15s ease;
             }}
             button:hover {{
-                background: #2ea043;
+                background: #333333;
             }}
             .hint {{
-                margin-top: 20px;
-                padding: 12px;
-                background: #0d1117;
+                margin-top: 24px;
+                padding: 16px;
+                background: #f8f8f8;
+                border: 1px solid #e5e5e5;
                 border-radius: 6px;
-                font-size: 12px;
-                color: #8b949e;
+                font-size: 13px;
+                color: #666666;
+                line-height: 1.5;
+            }}
+            .hint strong {{
+                color: #5f6f52;
+                font-weight: 600;
             }}
             .hint code {{
-                background: #30363d;
-                padding: 2px 6px;
-                border-radius: 3px;
-                color: #f0883e;
+                background: #1a1a1a;
+                padding: 3px 8px;
+                border-radius: 4px;
+                font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+                font-size: 12px;
+                color: #c586c0;
+            }}
+            .divider {{
+                display: flex;
+                align-items: center;
+                margin: 24px 0;
+                color: #999999;
+                font-size: 12px;
+            }}
+            .divider::before,
+            .divider::after {{
+                content: "";
+                flex: 1;
+                height: 1px;
+                background: #e5e5e5;
+            }}
+            .divider::before {{
+                margin-right: 12px;
+            }}
+            .divider::after {{
+                margin-left: 12px;
             }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>GitHub Mock</h1>
-            <p class="subtitle">Sign in to continue to the application</p>
+            <span class="badge">OAuth Mock</span>
+            <h1>GitHub<br>Sign In</h1>
+            <p class="subtitle">Sign in to continue to the application. Use any email address for testing.</p>
 
             <form method="POST">
                 <input type="hidden" name="client_id" value="{client_id}">
@@ -226,8 +276,8 @@ async def authorize_form(
             </form>
 
             <div class="hint">
-                <strong>Test hint:</strong> Use <code>unverified@...</code> to test
-                with an unverified email address.
+                <strong>Testing tip:</strong> Use <code>unverified@...</code> to simulate
+                an unverified email address.
             </div>
         </div>
     </body>
