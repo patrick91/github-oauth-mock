@@ -1,10 +1,13 @@
 """
 GitHub OAuth Mock Server
 
-A mock implementation of GitHub's OAuth endpoints for testing.
+A stateless mock implementation of GitHub's OAuth endpoints for testing.
 Email verification status is determined by the email pattern:
 - Emails starting with "unverified" → verified: false
 - All other emails → verified: true
+
+This mock is completely stateless - tokens are self-contained and encode
+the user's email, eliminating the need for shared storage across replicas.
 
 Endpoints:
 - GET  /login/oauth/authorize - Login form
@@ -14,9 +17,9 @@ Endpoints:
 - GET  /api/user/emails - User emails with verification status
 """
 
+import base64
 import hashlib
-import secrets
-import time
+import json
 from typing import Annotated
 from urllib.parse import urlencode
 
@@ -27,13 +30,8 @@ from pydantic import BaseModel
 
 app = FastAPI(
     title="GitHub OAuth Mock",
-    description="Mock GitHub OAuth server for testing",
+    description="Stateless mock GitHub OAuth server for testing",
 )
-
-
-# In-memory storage for auth codes and tokens
-auth_codes: dict[str, dict] = {}
-access_tokens: dict[str, dict] = {}
 
 
 class GitHubUser(BaseModel):
@@ -69,6 +67,42 @@ class GitHubEmail(BaseModel):
     visibility: str | None = "private"
 
 
+# =============================================================================
+# Stateless Token Encoding/Decoding
+# =============================================================================
+
+
+def encode_token(email: str) -> str:
+    """
+    Encode email into a self-contained token.
+
+    The token is simply base64-encoded JSON containing the email.
+    This makes the mock completely stateless - no storage needed.
+    """
+    data = {"email": email}
+    return base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+
+
+def decode_token(token: str) -> str | None:
+    """
+    Decode token to extract email.
+
+    Returns None if the token is invalid or cannot be decoded.
+    """
+    try:
+        # Handle potential padding issues
+        padded = token + "=" * (4 - len(token) % 4)
+        data = json.loads(base64.urlsafe_b64decode(padded).decode())
+        return data.get("email")
+    except Exception:
+        return None
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+
 def is_email_verified(email: str) -> bool:
     """Determine if email should be marked as verified based on pattern."""
     return not email.lower().startswith("unverified")
@@ -84,12 +118,38 @@ def generate_login(email: str) -> str:
     return email.split("@")[0].replace(".", "").replace("+", "")
 
 
+def extract_email_from_auth(authorization: str) -> str:
+    """
+    Extract email from Authorization header.
+
+    Raises HTTPException with 401 if token is invalid.
+    """
+    # Remove Bearer prefix (case-insensitive)
+    token = authorization
+    for prefix in ["Bearer ", "bearer ", "BEARER "]:
+        if token.startswith(prefix):
+            token = token[len(prefix) :]
+            break
+
+    email = decode_token(token)
+    if not email:
+        raise HTTPException(status_code=401, detail="Bad credentials")
+
+    return email
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+
 @app.get("/")
 def root():
     """Health check and info endpoint."""
     return {
         "service": "GitHub OAuth Mock",
-        "description": "Email verification is determined by email pattern",
+        "version": "2.0.0",
+        "description": "Stateless mock - tokens are self-contained",
         "rules": {
             "unverified@*": "verified: false",
             "*": "verified: true",
@@ -296,20 +356,8 @@ async def authorize_submit(
     code_challenge_method: Annotated[str, Form()] = "",
 ):
     """Process login form and redirect with auth code."""
-    # Generate auth code
-    code = secrets.token_urlsafe(32)
-
-    # Store auth data with the email
-    auth_codes[code] = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "scope": scope,
-        "state": state if state else None,
-        "code_challenge": code_challenge if code_challenge else None,
-        "code_challenge_method": code_challenge_method if code_challenge_method else None,
-        "email": email,
-        "created_at": time.time(),
-    }
+    # Generate self-contained auth code (encodes the email)
+    code = encode_token(email)
 
     # Build redirect URL
     params = {"code": code}
@@ -342,35 +390,18 @@ async def token(
     if not code:
         raise HTTPException(status_code=400, detail="Missing code")
 
-    if code not in auth_codes:
+    # Decode email from the self-contained auth code
+    email = decode_token(code)
+    if not email:
         raise HTTPException(status_code=400, detail="Invalid code")
 
-    auth_data = auth_codes[code]
-
-    # Check expiration (10 minutes)
-    if time.time() - auth_data["created_at"] > 600:
-        del auth_codes[code]
-        raise HTTPException(status_code=400, detail="Code expired")
-
-    # TODO: Verify code_challenge if PKCE was used
-
-    # Generate access token
-    access_token = secrets.token_urlsafe(32)
-
-    # Store token data with email
-    access_tokens[access_token] = {
-        "email": auth_data["email"],
-        "scope": auth_data["scope"],
-        "created_at": time.time(),
-    }
-
-    # Clean up used code
-    del auth_codes[code]
+    # Generate self-contained access token (same format, encodes email)
+    access_token = encode_token(email)
 
     response_data = {
         "access_token": access_token,
         "token_type": "bearer",
-        "scope": auth_data["scope"],
+        "scope": "user:email",
     }
 
     # Check Accept header for response format
@@ -382,21 +413,12 @@ async def token(
     return urlencode(response_data)
 
 
-async def _get_user_data(authorization: str) -> tuple[str, dict]:
-    """Extract token and get user data."""
-    token = authorization.replace("Bearer ", "").replace("bearer ", "")
-    if token not in access_tokens:
-        raise HTTPException(status_code=401, detail="Bad credentials")
-    return token, access_tokens[token]
-
-
 # Support both /api/user and /api/v3/user (GitHub Enterprise style)
 @app.get("/api/user", response_model=GitHubUser)
 @app.get("/api/v3/user", response_model=GitHubUser)
 async def get_user(authorization: Annotated[str, Header()]):
     """Get authenticated user's profile."""
-    _, token_data = await _get_user_data(authorization)
-    email = token_data["email"]
+    email = extract_email_from_auth(authorization)
 
     return GitHubUser(
         id=generate_user_id(email),
@@ -412,8 +434,7 @@ async def get_user(authorization: Annotated[str, Header()]):
 @app.get("/api/v3/user/emails", response_model=list[GitHubEmail])
 async def get_user_emails(authorization: Annotated[str, Header()]):
     """Get authenticated user's emails with verification status."""
-    _, token_data = await _get_user_data(authorization)
-    email = token_data["email"]
+    email = extract_email_from_auth(authorization)
 
     return [
         GitHubEmail(
@@ -431,6 +452,7 @@ async def get_user_emails(authorization: Annotated[str, Header()]):
 @app.get("/api/v3/user/orgs")
 async def get_user_orgs(authorization: Annotated[str, Header()]):
     """Get user's organizations (empty for mock)."""
+    _ = extract_email_from_auth(authorization)  # Validate token
     return []
 
 
@@ -438,4 +460,5 @@ async def get_user_orgs(authorization: Annotated[str, Header()]):
 @app.get("/api/v3/user/repos")
 async def get_user_repos(authorization: Annotated[str, Header()]):
     """Get user's repositories (empty for mock)."""
+    _ = extract_email_from_auth(authorization)  # Validate token
     return []
