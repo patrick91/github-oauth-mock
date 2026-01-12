@@ -4,4 +4,15 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.128.0",
+    "inline-snapshot>=0.30.0",
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
 ]

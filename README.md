@@ -9,6 +9,17 @@ A mock implementation of GitHub's OAuth endpoints for testing. Email verificatio
 | `unverified@*` | `false` |
 | Any other email | `true` |
 
+## Special Client IDs
+
+| Client ID | Behavior |
+|-----------|----------|
+| `fail-client-id` | Always fails authorization and token exchange |
+
+## OAuth Scopes
+
+By default, no scopes are granted. Use `scope=user:email` during authorization to
+populate the `email` field in `/api/user` and to access `/api/user/emails`.
+
 ## Quick Start
 
 ```bash
@@ -30,6 +41,18 @@ Visit http://localhost:8000/docs for the API documentation.
 | `/login/oauth/access_token` | POST | Token exchange |
 | `/api/user` | GET | User profile |
 | `/api/user/emails` | GET | User emails with verification status |
+
+## Testing
+
+```bash
+uv run pytest
+```
+
+To update inline snapshots:
+
+```bash
+uv run pytest --inline-snapshot=fix
+```
 
 ## Usage in E2E Tests
 
@@ -61,17 +84,6 @@ test("login with unverified email", async ({ page }) => {
   // App should handle unverified email appropriately
   await expect(page.getByText("Please verify your email")).toBeVisible()
 })
-```
-
-## Docker
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN pip install uv && uv sync --frozen --no-dev
-COPY main.py ./
-CMD ["uv", "run", "fastapi", "run", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ## License
