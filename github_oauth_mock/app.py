@@ -17,11 +17,19 @@ Endpoints:
 - GET  /api/user/emails - User emails with verification status
 """
 
+import logging
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, Form, Header, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 from .auth import (
     DEFAULT_SCOPE,
@@ -47,6 +55,21 @@ app = FastAPI(
     title="GitHub OAuth Mock",
     description="Stateless mock GitHub OAuth server for testing",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Log validation errors with full details for debugging."""
+    logger.error(
+        f"Validation error on {request.method} {request.url.path}\n"
+        f"  Query params: {dict(request.query_params)}\n"
+        f"  Errors: {exc.errors()}"
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
+
 
 def render_template(name: str, context: dict[str, str]) -> str:
     template = (TEMPLATES_DIR / name).read_text()
@@ -99,6 +122,10 @@ async def authorize_form(
     code_challenge_method: str | None = Query(None),
 ):
     """Show login form for GitHub OAuth mock."""
+    logger.info(
+        f"GET /login/oauth/authorize - client_id={client_id}, "
+        f"redirect_uri={redirect_uri}, scope={scope}"
+    )
     return render_template(
         "authorize.html",
         {
@@ -123,6 +150,10 @@ async def authorize_submit(
     code_challenge_method: Annotated[str, Form()] = "",
 ):
     """Process login form and redirect with auth code."""
+    logger.info(
+        f"POST /login/oauth/authorize - client_id={client_id}, "
+        f"email={email}, redirect_uri={redirect_uri}, scope={scope}"
+    )
     if client_id == FAIL_CLIENT_ID:
         params = {
             "error": "invalid_client",
