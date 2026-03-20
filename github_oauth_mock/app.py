@@ -21,7 +21,7 @@ import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, Form, Header, Query, Request
+from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -46,7 +46,16 @@ from .auth import (
     require_scope,
     token_response,
 )
-from .models import GitHubEmail, GitHubUser
+from .models import (
+    GitHubEmail,
+    GitHubInstallation,
+    GitHubInstallationAccount,
+    GitHubInstallationRepositoriesResponse,
+    GitHubInstallationsResponse,
+    GitHubRepository,
+    GitHubRepositoryOwner,
+    GitHubUser,
+)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = ROOT_DIR / "templates"
@@ -55,6 +64,58 @@ app = FastAPI(
     title="GitHub OAuth Mock",
     description="Stateless mock GitHub OAuth server for testing",
 )
+
+MOCK_INSTALLATIONS = [
+    GitHubInstallation(
+        id=1001,
+        account=GitHubInstallationAccount(login="mock-user", type="User"),
+    ),
+    GitHubInstallation(
+        id=2002,
+        account=GitHubInstallationAccount(login="mock-org", type="Organization"),
+    ),
+]
+
+MOCK_REPOSITORIES_BY_INSTALLATION = {
+    1001: [
+        GitHubRepository(
+            id=101,
+            name="demo-repo",
+            full_name="mock-user/demo-repo",
+            private=True,
+            owner=GitHubRepositoryOwner(login="mock-user"),
+        ),
+        GitHubRepository(
+            id=102,
+            name="playwright-repo",
+            full_name="mock-user/playwright-repo",
+            private=False,
+            owner=GitHubRepositoryOwner(login="mock-user"),
+        ),
+    ],
+    2002: [
+        GitHubRepository(
+            id=201,
+            name="org-repo",
+            full_name="mock-org/org-repo",
+            private=True,
+            owner=GitHubRepositoryOwner(login="mock-org"),
+        ),
+        GitHubRepository(
+            id=202,
+            name="org-public-repo",
+            full_name="mock-org/org-public-repo",
+            private=False,
+            owner=GitHubRepositoryOwner(login="mock-org"),
+        ),
+    ],
+}
+
+MOCK_REPO_INSTALLATIONS = {
+    (repo.owner.login, repo.name): installation_id
+    for installation_id, repositories in MOCK_REPOSITORIES_BY_INSTALLATION.items()
+    for repo in repositories
+}
 
 
 @app.exception_handler(RequestValidationError)
@@ -108,6 +169,9 @@ def api_info():
             "token": "/login/oauth/access_token",
             "user": "/api/user",
             "emails": "/api/user/emails",
+            "installations": "/api/user/installations",
+            "installation_repositories": "/api/user/installations/{installation_id}/repositories",
+            "repository_installation": "/api/repos/{owner}/{repo}/installation",
         },
     }
 
@@ -287,6 +351,71 @@ async def get_user_emails(authorization: Annotated[str | None, Header()] = None)
             verified=is_email_verified(email),
         )
     ]
+
+
+@app.get("/api/user/installations", response_model=GitHubInstallationsResponse)
+@app.get("/api/v3/user/installations", response_model=GitHubInstallationsResponse)
+async def get_user_installations(
+    authorization: Annotated[str | None, Header()] = None,
+):
+    """Get GitHub App installations accessible to the authenticated user."""
+    _ = extract_email_from_auth(authorization)
+    return GitHubInstallationsResponse(installations=MOCK_INSTALLATIONS)
+
+
+@app.get(
+    "/api/user/installations/{installation_id}/repositories",
+    response_model=GitHubInstallationRepositoriesResponse,
+)
+@app.get(
+    "/api/v3/user/installations/{installation_id}/repositories",
+    response_model=GitHubInstallationRepositoriesResponse,
+)
+async def get_installation_repositories(
+    installation_id: int,
+    authorization: Annotated[str | None, Header()] = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(30, ge=1, le=100),
+):
+    """Get repositories for a GitHub App installation."""
+    _ = extract_email_from_auth(authorization)
+
+    repositories = MOCK_REPOSITORIES_BY_INSTALLATION.get(installation_id)
+    if repositories is None:
+        raise HTTPException(status_code=404, detail="Installation not found")
+
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    return GitHubInstallationRepositoriesResponse(
+        total_count=len(repositories),
+        repositories=repositories[start:end],
+    )
+
+
+@app.get("/api/repos/{owner}/{repo}/installation", response_model=GitHubInstallation)
+@app.get(
+    "/api/v3/repos/{owner}/{repo}/installation",
+    response_model=GitHubInstallation,
+)
+async def get_repository_installation(
+    owner: str,
+    repo: str,
+    authorization: Annotated[str | None, Header()] = None,
+):
+    """Get the GitHub App installation that covers a repository."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Requires authentication")
+
+    installation_id = MOCK_REPO_INSTALLATIONS.get((owner, repo))
+    if installation_id is None:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    for installation in MOCK_INSTALLATIONS:
+        if installation.id == installation_id:
+            return installation
+
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 # Additional endpoints that GitHub has (minimal implementations)

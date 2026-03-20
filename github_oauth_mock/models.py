@@ -32,3 +32,47 @@ class GitHubEmail(BaseModel):
     primary: bool
     verified: bool
     visibility: str | None = "private"
+
+
+class GitHubInstallationAccount(BaseModel):
+    """GitHub installation account."""
+
+    login: str
+    type: str
+
+
+class GitHubInstallation(BaseModel):
+    """GitHub App installation."""
+
+    id: int
+    account: GitHubInstallationAccount
+
+
+class GitHubInstallationsResponse(BaseModel):
+    """GitHub App installations response."""
+
+    installations: list[GitHubInstallation]
+
+
+class GitHubRepositoryOwner(BaseModel):
+    """GitHub repository owner."""
+
+    login: str
+
+
+class GitHubRepository(BaseModel):
+    """GitHub repository response."""
+
+    id: int
+    name: str
+    full_name: str
+    private: bool
+    owner: GitHubRepositoryOwner
+    updated_at: str = "2024-01-01T00:00:00Z"
+
+
+class GitHubInstallationRepositoriesResponse(BaseModel):
+    """GitHub installation repositories response."""
+
+    total_count: int
+    repositories: list[GitHubRepository]

@@ -41,6 +41,9 @@ Visit http://localhost:8000/docs for the API documentation.
 | `/login/oauth/access_token` | POST | Token exchange |
 | `/api/user` | GET | User profile |
 | `/api/user/emails` | GET | User emails with verification status |
+| `/api/user/installations` | GET | GitHub App installations for the user |
+| `/api/user/installations/{installation_id}/repositories` | GET | Repositories for an installation |
+| `/api/repos/{owner}/{repo}/installation` | GET | Installation that covers a repository |
 
 ## Testing
 
