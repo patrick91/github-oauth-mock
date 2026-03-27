@@ -5,7 +5,7 @@ from inline_snapshot import snapshot
 from fastapi.testclient import TestClient
 
 from github_oauth_mock.app import app
-from github_oauth_mock.auth import FAIL_CLIENT_ID
+from github_oauth_mock.auth import FAIL_CLIENT_ID, FAIL_REFRESH_TOKEN
 
 
 @pytest.fixture
@@ -114,6 +114,8 @@ def test_token_json_response(client: TestClient) -> None:
             "access_token": "eyJlbWFpbCI6ICJ0ZXN0QGV4YW1wbGUuY29tIiwgInNjb3BlIjogInVzZXI6ZW1haWwifQ==",
             "token_type": "bearer",
             "scope": "user:email",
+            "refresh_token": "eyJlbWFpbCI6ICJ0ZXN0QGV4YW1wbGUuY29tIiwgInNjb3BlIjogInVzZXI6ZW1haWwifQ==",
+            "refresh_token_expires_in": 15897600,
         }
     )
 
@@ -130,6 +132,8 @@ def test_token_form_response(client: TestClient) -> None:
             "access_token": "eyJlbWFpbCI6ICJ0ZXN0QGV4YW1wbGUuY29tIiwgInNjb3BlIjogInVzZXI6ZW1haWwifQ==",
             "token_type": "bearer",
             "scope": "user:email",
+            "refresh_token": "eyJlbWFpbCI6ICJ0ZXN0QGV4YW1wbGUuY29tIiwgInNjb3BlIjogInVzZXI6ZW1haWwifQ==",
+            "refresh_token_expires_in": "15897600",
         }
     )
 
@@ -282,3 +286,109 @@ def test_repository_installation_lookup_unknown_repo(client: TestClient) -> None
 
     assert response.status_code == 404
     assert response.json() == snapshot({"detail": "Not Found"})
+
+
+def test_refresh_token_success_json(client: TestClient) -> None:
+    """Valid refresh token returns new tokens as JSON."""
+    location = authorize(client, scope="user:email")
+    code = extract_code(location)
+    token_resp = exchange(client, code, accept="application/json")
+    refresh_token = token_resp.json()["refresh_token"]
+
+    response = client.post(
+        "/login/oauth/access_token",
+        data={
+            "client_id": "test-client",
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
+        headers={"accept": "application/json"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "access_token" in payload
+    assert "refresh_token" in payload
+    assert payload["token_type"] == "bearer"
+    assert payload["scope"] == "user:email"
+
+
+def test_refresh_token_success_form(client: TestClient) -> None:
+    """Valid refresh token returns new tokens as form-urlencoded."""
+    location = authorize(client, scope="user:email")
+    code = extract_code(location)
+    token_resp = exchange(client, code, accept="application/json")
+    refresh_token = token_resp.json()["refresh_token"]
+
+    response = client.post(
+        "/login/oauth/access_token",
+        data={
+            "client_id": "test-client",
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-www-form-urlencoded")
+    payload = dict(parse_qsl(response.text))
+    assert "access_token" in payload
+    assert "refresh_token" in payload
+
+
+def test_refresh_token_bad_token_form(client: TestClient) -> None:
+    """Bad refresh token returns 200 with URL-encoded error (GitHub's real behavior)."""
+    response = client.post(
+        "/login/oauth/access_token",
+        data={
+            "client_id": "test-client",
+            "grant_type": "refresh_token",
+            "refresh_token": FAIL_REFRESH_TOKEN,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-www-form-urlencoded")
+    payload = dict(parse_qsl(response.text))
+    assert payload == snapshot(
+        {
+            "error": "bad_refresh_token",
+            "error_description": "bad-verification-code",
+        }
+    )
+
+
+def test_refresh_token_bad_token_json(client: TestClient) -> None:
+    """Bad refresh token returns 200 with JSON error when Accept: application/json."""
+    response = client.post(
+        "/login/oauth/access_token",
+        data={
+            "client_id": "test-client",
+            "grant_type": "refresh_token",
+            "refresh_token": FAIL_REFRESH_TOKEN,
+        },
+        headers={"accept": "application/json"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == snapshot(
+        {
+            "error": "bad_refresh_token",
+            "error_description": "bad-verification-code",
+        }
+    )
+
+
+def test_refresh_token_missing_token(client: TestClient) -> None:
+    """Missing refresh token returns error."""
+    response = client.post(
+        "/login/oauth/access_token",
+        data={
+            "client_id": "test-client",
+            "grant_type": "refresh_token",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = dict(parse_qsl(response.text))
+    assert payload["error"] == "bad_refresh_token"

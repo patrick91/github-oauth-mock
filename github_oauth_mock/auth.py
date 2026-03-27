@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
 
 FAIL_CLIENT_ID = "fail-client-id"
+FAIL_REFRESH_TOKEN = "fail-refresh-token"
 DEFAULT_SCOPE = ""
 
 

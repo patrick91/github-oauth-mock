@@ -23,7 +23,7 @@ from typing import Annotated
 
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 from .auth import (
     DEFAULT_SCOPE,
     FAIL_CLIENT_ID,
+    FAIL_REFRESH_TOKEN,
     build_redirect_url,
     decode_token,
     encode_token,
@@ -164,6 +165,9 @@ def api_info():
         "special_clients": {
             "fail": FAIL_CLIENT_ID,
         },
+        "special_tokens": {
+            "fail_refresh": FAIL_REFRESH_TOKEN,
+        },
         "endpoints": {
             "authorize": "/login/oauth/authorize",
             "token": "/login/oauth/access_token",
@@ -250,12 +254,15 @@ async def token(
     redirect_uri: Annotated[str | None, Form()] = None,
     code_verifier: Annotated[str | None, Form()] = None,
     grant_type: Annotated[str, Form()] = "authorization_code",
+    refresh_token: Annotated[str | None, Form()] = None,
 ):
     """
     Token exchange endpoint.
 
     GitHub returns tokens as form-urlencoded by default,
     but accepts Accept: application/json header for JSON response.
+
+    Supports both authorization_code and refresh_token grant types.
     """
     accept = request.headers.get("accept", "")
     if client_id == FAIL_CLIENT_ID:
@@ -267,6 +274,9 @@ async def token(
             accept,
             status_code=400,
         )
+
+    if grant_type == "refresh_token":
+        return _handle_refresh_token(refresh_token, accept)
 
     if grant_type != "authorization_code":
         return token_response(
@@ -307,13 +317,63 @@ async def token(
     # Generate self-contained access token (same format, encodes email)
     access_token = encode_token(email, scope)
 
+    # Generate a refresh token (same self-contained format)
+    new_refresh_token = encode_token(email, scope)
+
     response_data = {
         "access_token": access_token,
         "token_type": "bearer",
         "scope": scope,
+        "refresh_token": new_refresh_token,
+        "refresh_token_expires_in": 15897600,
     }
 
     return token_response(response_data, accept)
+
+
+def _handle_refresh_token(refresh_token: str | None, accept: str) -> Response:
+    """Handle the refresh_token grant type.
+
+    GitHub returns 200 with a URL-encoded error body for bad refresh tokens,
+    which is the exact behavior that caused the production bug.
+    """
+    if not refresh_token or refresh_token == FAIL_REFRESH_TOKEN:
+        return token_response(
+            {
+                "error": "bad_refresh_token",
+                "error_description": "bad-verification-code",
+            },
+            accept,
+        )
+
+    token_data = decode_token(refresh_token)
+    if not token_data or "email" not in token_data:
+        return token_response(
+            {
+                "error": "bad_refresh_token",
+                "error_description": "bad-verification-code",
+            },
+            accept,
+        )
+
+    email = token_data["email"]
+    scope = token_data.get("scope") or DEFAULT_SCOPE
+    if not isinstance(scope, str):
+        scope = DEFAULT_SCOPE
+
+    new_access_token = encode_token(email, scope)
+    new_refresh_token = encode_token(email, scope)
+
+    return token_response(
+        {
+            "access_token": new_access_token,
+            "token_type": "bearer",
+            "scope": scope,
+            "refresh_token": new_refresh_token,
+            "refresh_token_expires_in": 15897600,
+        },
+        accept,
+    )
 
 
 # Support both /api/user and /api/v3/user (GitHub Enterprise style)
