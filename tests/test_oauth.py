@@ -222,7 +222,7 @@ def test_user_installations(client: TestClient) -> None:
             "installations": [
                 {
                     "id": 1001,
-                    "account": {"login": "mock-user", "type": "User"},
+                    "account": {"login": "test", "type": "User"},
                 },
                 {
                     "id": 2002,
@@ -253,9 +253,9 @@ def test_installation_repositories_paginate(client: TestClient) -> None:
                 {
                     "id": 102,
                     "name": "playwright-repo",
-                    "full_name": "mock-user/playwright-repo",
+                    "full_name": "test/playwright-repo",
                     "private": False,
-                    "owner": {"login": "mock-user"},
+                    "owner": {"login": "test"},
                     "updated_at": "2024-01-01T00:00:00Z",
                 }
             ],
@@ -265,7 +265,7 @@ def test_installation_repositories_paginate(client: TestClient) -> None:
 
 def test_repository_installation_lookup(client: TestClient) -> None:
     response = client.get(
-        "/api/repos/mock-user/demo-repo/installation",
+        "/api/repos/some-user/demo-repo/installation",
         headers={"Authorization": "Bearer app-jwt"},
     )
 
@@ -273,14 +273,14 @@ def test_repository_installation_lookup(client: TestClient) -> None:
     assert response.json() == snapshot(
         {
             "id": 1001,
-            "account": {"login": "mock-user", "type": "User"},
+            "account": {"login": "some-user", "type": "User"},
         }
     )
 
 
 def test_repository_installation_lookup_unknown_repo(client: TestClient) -> None:
     response = client.get(
-        "/api/repos/mock-user/missing-repo/installation",
+        "/api/repos/some-user/missing-repo/installation",
         headers={"Authorization": "Bearer app-jwt"},
     )
 

@@ -66,57 +66,63 @@ app = FastAPI(
     description="Stateless mock GitHub OAuth server for testing",
 )
 
-MOCK_INSTALLATIONS = [
-    GitHubInstallation(
-        id=1001,
-        account=GitHubInstallationAccount(login="mock-user", type="User"),
+USER_INSTALLATION_ID = 1001
+ORG_INSTALLATION_ID = 2002
+ORG_LOGIN = "mock-org"
+
+# User-type installation repos — owner/full_name are filled dynamically per request.
+_USER_REPO_TEMPLATES = [
+    {"id": 101, "name": "demo-repo", "private": True},
+    {"id": 102, "name": "playwright-repo", "private": False},
+]
+
+# Repo names belonging to the user installation (for lookup by name).
+_USER_REPO_NAMES = {r["name"] for r in _USER_REPO_TEMPLATES}
+
+ORG_REPOSITORIES = [
+    GitHubRepository(
+        id=201,
+        name="org-repo",
+        full_name=f"{ORG_LOGIN}/org-repo",
+        private=True,
+        owner=GitHubRepositoryOwner(login=ORG_LOGIN),
     ),
-    GitHubInstallation(
-        id=2002,
-        account=GitHubInstallationAccount(login="mock-org", type="Organization"),
+    GitHubRepository(
+        id=202,
+        name="org-public-repo",
+        full_name=f"{ORG_LOGIN}/org-public-repo",
+        private=False,
+        owner=GitHubRepositoryOwner(login=ORG_LOGIN),
     ),
 ]
 
-MOCK_REPOSITORIES_BY_INSTALLATION = {
-    1001: [
-        GitHubRepository(
-            id=101,
-            name="demo-repo",
-            full_name="mock-user/demo-repo",
-            private=True,
-            owner=GitHubRepositoryOwner(login="mock-user"),
-        ),
-        GitHubRepository(
-            id=102,
-            name="playwright-repo",
-            full_name="mock-user/playwright-repo",
-            private=False,
-            owner=GitHubRepositoryOwner(login="mock-user"),
-        ),
-    ],
-    2002: [
-        GitHubRepository(
-            id=201,
-            name="org-repo",
-            full_name="mock-org/org-repo",
-            private=True,
-            owner=GitHubRepositoryOwner(login="mock-org"),
-        ),
-        GitHubRepository(
-            id=202,
-            name="org-public-repo",
-            full_name="mock-org/org-public-repo",
-            private=False,
-            owner=GitHubRepositoryOwner(login="mock-org"),
-        ),
-    ],
-}
+ORG_REPO_NAMES = {r.name for r in ORG_REPOSITORIES}
 
-MOCK_REPO_INSTALLATIONS = {
-    (repo.owner.login, repo.name): installation_id
-    for installation_id, repositories in MOCK_REPOSITORIES_BY_INSTALLATION.items()
-    for repo in repositories
-}
+
+def _build_installations(login: str) -> list[GitHubInstallation]:
+    return [
+        GitHubInstallation(
+            id=USER_INSTALLATION_ID,
+            account=GitHubInstallationAccount(login=login, type="User"),
+        ),
+        GitHubInstallation(
+            id=ORG_INSTALLATION_ID,
+            account=GitHubInstallationAccount(login=ORG_LOGIN, type="Organization"),
+        ),
+    ]
+
+
+def _build_user_repositories(login: str) -> list[GitHubRepository]:
+    return [
+        GitHubRepository(
+            id=t["id"],
+            name=t["name"],
+            full_name=f"{login}/{t['name']}",
+            private=t["private"],
+            owner=GitHubRepositoryOwner(login=login),
+        )
+        for t in _USER_REPO_TEMPLATES
+    ]
 
 
 @app.exception_handler(RequestValidationError)
@@ -419,8 +425,9 @@ async def get_user_installations(
     authorization: Annotated[str | None, Header()] = None,
 ):
     """Get GitHub App installations accessible to the authenticated user."""
-    _ = extract_email_from_auth(authorization)
-    return GitHubInstallationsResponse(installations=MOCK_INSTALLATIONS)
+    email = extract_email_from_auth(authorization)
+    login = generate_login(email)
+    return GitHubInstallationsResponse(installations=_build_installations(login))
 
 
 @app.get(
@@ -438,10 +445,14 @@ async def get_installation_repositories(
     per_page: int = Query(30, ge=1, le=100),
 ):
     """Get repositories for a GitHub App installation."""
-    _ = extract_email_from_auth(authorization)
+    email = extract_email_from_auth(authorization)
+    login = generate_login(email)
 
-    repositories = MOCK_REPOSITORIES_BY_INSTALLATION.get(installation_id)
-    if repositories is None:
+    if installation_id == USER_INSTALLATION_ID:
+        repositories = _build_user_repositories(login)
+    elif installation_id == ORG_INSTALLATION_ID:
+        repositories = ORG_REPOSITORIES
+    else:
         raise HTTPException(status_code=404, detail="Installation not found")
 
     start = (page - 1) * per_page
@@ -467,13 +478,17 @@ async def get_repository_installation(
     if not authorization:
         raise HTTPException(status_code=401, detail="Requires authentication")
 
-    installation_id = MOCK_REPO_INSTALLATIONS.get((owner, repo))
-    if installation_id is None:
-        raise HTTPException(status_code=404, detail="Not Found")
+    if repo in _USER_REPO_NAMES:
+        return GitHubInstallation(
+            id=USER_INSTALLATION_ID,
+            account=GitHubInstallationAccount(login=owner, type="User"),
+        )
 
-    for installation in MOCK_INSTALLATIONS:
-        if installation.id == installation_id:
-            return installation
+    if repo in ORG_REPO_NAMES and owner == ORG_LOGIN:
+        return GitHubInstallation(
+            id=ORG_INSTALLATION_ID,
+            account=GitHubInstallationAccount(login=ORG_LOGIN, type="Organization"),
+        )
 
     raise HTTPException(status_code=404, detail="Not Found")
 
