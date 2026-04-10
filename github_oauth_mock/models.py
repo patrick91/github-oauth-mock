@@ -68,7 +68,21 @@ class GitHubRepository(BaseModel):
     full_name: str
     private: bool
     owner: GitHubRepositoryOwner
+    default_branch: str = "main"
     updated_at: str = "2024-01-01T00:00:00Z"
+
+
+class GitHubCommitData(BaseModel):
+    """GitHub commit inner data."""
+
+    message: str
+
+
+class GitHubCommit(BaseModel):
+    """GitHub commit response."""
+
+    sha: str
+    commit: GitHubCommitData
 
 
 class GitHubInstallationRepositoriesResponse(BaseModel):

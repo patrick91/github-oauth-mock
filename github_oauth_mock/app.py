@@ -48,6 +48,8 @@ from .auth import (
     token_response,
 )
 from .models import (
+    GitHubCommit,
+    GitHubCommitData,
     GitHubEmail,
     GitHubInstallation,
     GitHubInstallationAccount,
@@ -491,6 +493,55 @@ async def get_repository_installation(
         )
 
     raise HTTPException(status_code=404, detail="Not Found")
+
+
+@app.get("/api/repos/{owner}/{repo}", response_model=GitHubRepository)
+@app.get("/api/v3/repos/{owner}/{repo}", response_model=GitHubRepository)
+async def get_repository(
+    owner: str,
+    repo: str,
+    authorization: Annotated[str | None, Header()] = None,
+):
+    """Get a repository by owner and name."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Requires authentication")
+
+    if repo in _USER_REPO_NAMES:
+        template = next(t for t in _USER_REPO_TEMPLATES if t["name"] == repo)
+        return GitHubRepository(
+            id=template["id"],
+            name=repo,
+            full_name=f"{owner}/{repo}",
+            private=template["private"],
+            owner=GitHubRepositoryOwner(login=owner),
+        )
+
+    if repo in ORG_REPO_NAMES and owner == ORG_LOGIN:
+        return next(r for r in ORG_REPOSITORIES if r.name == repo)
+
+    raise HTTPException(status_code=404, detail="Not Found")
+
+
+@app.get("/api/repos/{owner}/{repo}/commits/{ref}", response_model=GitHubCommit)
+@app.get("/api/v3/repos/{owner}/{repo}/commits/{ref}", response_model=GitHubCommit)
+async def get_commit(
+    owner: str,
+    repo: str,
+    ref: str,
+    authorization: Annotated[str | None, Header()] = None,
+):
+    """Get a commit by ref (branch name or SHA)."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Requires authentication")
+
+    all_known_repos = _USER_REPO_NAMES | ORG_REPO_NAMES
+    if repo not in all_known_repos:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    return GitHubCommit(
+        sha="abc123mock",
+        commit=GitHubCommitData(message=f"Mock commit on {ref}"),
+    )
 
 
 # Additional endpoints that GitHub has (minimal implementations)

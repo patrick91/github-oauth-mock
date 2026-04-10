@@ -256,6 +256,7 @@ def test_installation_repositories_paginate(client: TestClient) -> None:
                     "full_name": "test/playwright-repo",
                     "private": False,
                     "owner": {"login": "test"},
+                    "default_branch": "main",
                     "updated_at": "2024-01-01T00:00:00Z",
                 }
             ],
