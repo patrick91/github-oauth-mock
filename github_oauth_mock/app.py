@@ -15,6 +15,7 @@ Endpoints:
 - POST /login/oauth/access_token - Token exchange
 - GET  /api/user - User profile
 - GET  /api/user/emails - User emails with verification status
+- GET  /api/repositories/{repository_id} - Repository by id
 """
 
 import logging
@@ -127,6 +128,18 @@ def _build_user_repositories(login: str) -> list[GitHubRepository]:
     ]
 
 
+def _find_repository_by_id(login: str, repository_id: int) -> GitHubRepository | None:
+    for repository in _build_user_repositories(login):
+        if repository.id == repository_id:
+            return repository
+
+    for repository in ORG_REPOSITORIES:
+        if repository.id == repository_id:
+            return repository
+
+    return None
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Log validation errors with full details for debugging."""
@@ -183,6 +196,7 @@ def api_info():
             "emails": "/api/user/emails",
             "installations": "/api/user/installations",
             "installation_repositories": "/api/user/installations/{installation_id}/repositories",
+            "repository_by_id": "/api/repositories/{repository_id}",
             "repository_installation": "/api/repos/{owner}/{repo}/installation",
         },
     }
@@ -464,6 +478,21 @@ async def get_installation_repositories(
         total_count=len(repositories),
         repositories=repositories[start:end],
     )
+
+
+@app.get("/api/repositories/{repository_id}", response_model=GitHubRepository)
+@app.get("/api/v3/repositories/{repository_id}", response_model=GitHubRepository)
+async def get_repository_by_id(
+    repository_id: int,
+    authorization: Annotated[str | None, Header()] = None,
+):
+    """Get a repository by its global GitHub repository id."""
+    email = extract_email_from_auth(authorization)
+    login = generate_login(email)
+    repository = _find_repository_by_id(login, repository_id)
+    if repository is None:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return repository
 
 
 @app.get("/api/repos/{owner}/{repo}/installation", response_model=GitHubInstallation)

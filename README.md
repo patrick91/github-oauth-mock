@@ -43,6 +43,7 @@ Visit http://localhost:8000/docs for the API documentation.
 | `/api/user/emails` | GET | User emails with verification status |
 | `/api/user/installations` | GET | GitHub App installations for the user |
 | `/api/user/installations/{installation_id}/repositories` | GET | Repositories for an installation |
+| `/api/repositories/{repository_id}` | GET | Repository by global GitHub repository ID |
 | `/api/repos/{owner}/{repo}/installation` | GET | Installation that covers a repository |
 
 ## Testing

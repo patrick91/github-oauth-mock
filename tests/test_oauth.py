@@ -264,6 +264,62 @@ def test_installation_repositories_paginate(client: TestClient) -> None:
     )
 
 
+def test_repository_by_id_user_repo(client: TestClient) -> None:
+    location = authorize(client, scope="user:email")
+    code = extract_code(location)
+    token_response = exchange(client, code, accept="application/json")
+    token = token_response.json()["access_token"]
+
+    response = client.get("/api/repositories/101", headers=auth_header(token))
+
+    assert response.status_code == 200
+    assert response.json() == snapshot(
+        {
+            "id": 101,
+            "name": "demo-repo",
+            "full_name": "test/demo-repo",
+            "private": True,
+            "owner": {"login": "test"},
+            "default_branch": "main",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }
+    )
+
+
+def test_repository_by_id_org_repo(client: TestClient) -> None:
+    location = authorize(client, scope="user:email")
+    code = extract_code(location)
+    token_response = exchange(client, code, accept="application/json")
+    token = token_response.json()["access_token"]
+
+    response = client.get("/api/repositories/201", headers=auth_header(token))
+
+    assert response.status_code == 200
+    assert response.json() == snapshot(
+        {
+            "id": 201,
+            "name": "org-repo",
+            "full_name": "mock-org/org-repo",
+            "private": True,
+            "owner": {"login": "mock-org"},
+            "default_branch": "main",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }
+    )
+
+
+def test_repository_by_id_unknown_repo(client: TestClient) -> None:
+    location = authorize(client, scope="user:email")
+    code = extract_code(location)
+    token_response = exchange(client, code, accept="application/json")
+    token = token_response.json()["access_token"]
+
+    response = client.get("/api/repositories/999", headers=auth_header(token))
+
+    assert response.status_code == 404
+    assert response.json() == snapshot({"detail": "Not Found"})
+
+
 def test_repository_installation_lookup(client: TestClient) -> None:
     response = client.get(
         "/api/repos/some-user/demo-repo/installation",
