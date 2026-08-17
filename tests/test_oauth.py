@@ -234,6 +234,25 @@ def test_user_installations(client: TestClient) -> None:
     )
 
 
+def test_user_installations_unavailable_email(client: TestClient) -> None:
+    location = authorize(
+        client,
+        email="installations-unavailable+test@example.com",
+        scope="user:email",
+    )
+    code = extract_code(location)
+    token_response = exchange(client, code, accept="application/json")
+    token = token_response.json()["access_token"]
+
+    response = client.get(
+        "/api/user/installations",
+        headers=auth_header(token),
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"message": "Service unavailable"}
+
+
 def test_installation_repositories_paginate(client: TestClient) -> None:
     location = authorize(client, scope="user:email")
     code = extract_code(location)

@@ -19,6 +19,7 @@ A mock implementation of GitHub's OAuth endpoints for testing. Email verificatio
 
 | Email Pattern | Behavior |
 |---------------|----------|
+| `installations-unavailable+*@*` | Returns `503 Service Unavailable` when listing installations |
 | `repositories-timeout+*@*` | Delays installation repository responses for 6 seconds |
 
 ## OAuth Scopes

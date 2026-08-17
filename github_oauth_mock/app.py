@@ -73,6 +73,7 @@ app = FastAPI(
 USER_INSTALLATION_ID = 1001
 ORG_INSTALLATION_ID = 2002
 ORG_LOGIN = "mock-org"
+INSTALLATIONS_UNAVAILABLE_EMAIL_PREFIX = "installations-unavailable+"
 REPOSITORIES_TIMEOUT_EMAIL_PREFIX = "repositories-timeout+"
 REPOSITORIES_TIMEOUT_SECONDS = 6
 
@@ -445,6 +446,12 @@ async def get_user_installations(
 ):
     """Get GitHub App installations accessible to the authenticated user."""
     email = extract_email_from_auth(authorization)
+    if email.startswith(INSTALLATIONS_UNAVAILABLE_EMAIL_PREFIX):
+        return JSONResponse(
+            status_code=503,
+            content={"message": "Service unavailable"},
+        )
+
     login = generate_login(email)
     return GitHubInstallationsResponse(installations=_build_installations(login))
 
