@@ -1,10 +1,11 @@
 from urllib.parse import parse_qs, parse_qsl, urlparse
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from inline_snapshot import snapshot
 from fastapi.testclient import TestClient
 
-from github_oauth_mock.app import app
+from github_oauth_mock.app import REPOSITORIES_TIMEOUT_SECONDS, app
 from github_oauth_mock.auth import FAIL_CLIENT_ID, FAIL_REFRESH_TOKEN
 
 
@@ -262,6 +263,28 @@ def test_installation_repositories_paginate(client: TestClient) -> None:
             ],
         }
     )
+
+
+def test_installation_repositories_timeout_email(client: TestClient) -> None:
+    location = authorize(
+        client,
+        email="repositories-timeout+test@example.com",
+        scope="user:email",
+    )
+    code = extract_code(location)
+    token_response = exchange(client, code, accept="application/json")
+    token = token_response.json()["access_token"]
+
+    with patch(
+        "github_oauth_mock.app.asyncio.sleep", new_callable=AsyncMock
+    ) as sleep:
+        response = client.get(
+            "/api/user/installations/1001/repositories",
+            headers=auth_header(token),
+        )
+
+    sleep.assert_awaited_once_with(REPOSITORIES_TIMEOUT_SECONDS)
+    assert response.status_code == 200
 
 
 def test_repository_by_id_user_repo(client: TestClient) -> None:

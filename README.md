@@ -15,6 +15,12 @@ A mock implementation of GitHub's OAuth endpoints for testing. Email verificatio
 |-----------|----------|
 | `fail-client-id` | Always fails authorization and token exchange |
 
+## Special Email Patterns
+
+| Email Pattern | Behavior |
+|---------------|----------|
+| `repositories-timeout+*@*` | Delays installation repository responses for 6 seconds |
+
 ## OAuth Scopes
 
 By default, no scopes are granted. Use `scope=user:email` during authorization to

@@ -18,6 +18,7 @@ Endpoints:
 - GET  /api/repositories/{repository_id} - Repository by id
 """
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Annotated
@@ -72,6 +73,8 @@ app = FastAPI(
 USER_INSTALLATION_ID = 1001
 ORG_INSTALLATION_ID = 2002
 ORG_LOGIN = "mock-org"
+REPOSITORIES_TIMEOUT_EMAIL_PREFIX = "repositories-timeout+"
+REPOSITORIES_TIMEOUT_SECONDS = 6
 
 # User-type installation repos — owner/full_name are filled dynamically per request.
 _USER_REPO_TEMPLATES = [
@@ -470,6 +473,9 @@ async def get_installation_repositories(
         repositories = ORG_REPOSITORIES
     else:
         raise HTTPException(status_code=404, detail="Installation not found")
+
+    if email.startswith(REPOSITORIES_TIMEOUT_EMAIL_PREFIX):
+        await asyncio.sleep(REPOSITORIES_TIMEOUT_SECONDS)
 
     start = (page - 1) * per_page
     end = start + per_page
